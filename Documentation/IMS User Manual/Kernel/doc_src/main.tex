@@ -1,0 +1,143 @@
+\documentclass[hidelinks]{report}
+
+\usepackage{graphicx}
+\usepackage{times}
+\usepackage{plain}
+\usepackage[plainpages=false]{hyperref}
+\usepackage{courier}
+\usepackage{caption}
+
+% To force figures to appear after text(along with [H] option)
+\usepackage{float}
+
+% To apply linespacing to some content
+\usepackage{setspace}
+
+% To show commands, code snippets
+\usepackage{listings}
+
+% To use checkmark (tick symbol)
+\usepackage{amssymb}
+
+\graphicspath{ {images/pdf/} }
+
+\pagestyle{plain}
+
+\fontfamily{Times}
+\selectfont
+
+\setlength{\textwidth}{6.5in}
+\setlength{\textheight}{8.5in}
+\setlength{\topmargin}{-0.25in}
+\setlength{\oddsidemargin}{-0.00in}
+\setlength{\evensidemargin}{-0.00in}
+
+% To use multirow feature of latex tables
+\usepackage{multirow}
+
+% Using and defining own color
+\usepackage{color}
+\definecolor{mycol}{RGB}{52, 43, 41}
+
+% Defining courier font usage syntax
+\newcommand{\cf}[1] {
+	\textbf{\texttt{#1}}
+}
+
+% Defining checkmark usage syntax
+\newcommand{\T} {
+	\checkmark
+}
+
+
+\begin{document}
+%% Line spacing 1.5 applied
+\setstretch{1.5}
+
+\begin{center}
+\section*{User Manual for NFV IMS core on kernel setup}
+\end{center}
+
+
+\paragraph*{NOTE:} The instructions given in this manual work only for Linux-used machines, and might not work as expected
+on other OSes such as Mac and Windows. Please use online references in such cases.For details on understanding the code and various procedures involved in IMS core, please look at the \cf{developer\_manual.pdf}
+
+\section*{SETUP:}
+\begin{itemize}
+\item Download repository.
+\item You will need to have 5 VMs for setup. Assign one VM for each software module (P-CSCF, I-CSCF, HSS, S-CSCF and RAN). Before proceeding ahead, ensure proper communication between all VMs using the ping command. 
+\item Open \cf{common.h} file, replace IP address of each component with IP address you're planning to assign to that component. \\
+If VM on which you're planning to use RAN has IP address 10.20.30.40 then change \ 
+\begin{lstlisting}[language=c]
+#define UEADDR "192.168.122.251" // RAN 
+\end{lstlisting}
+to 
+
+\begin{lstlisting}[language=c]
+#define UEADDR "10.20.30.40" // RAN \end{lstlisting}
+
+Similarly for other all NFs. 
+
+\item Copy downloaded source on all VMs (with updated \cf{common.h}). 
+\item Run following command on all VMs.
+\begin{lstlisting}[language=bash]
+sudo apt-get install libssl-dev 
+\end{lstlisting}
+\item  Setting up how many cores you want to run NF with (This instruction applies to PCSCF, ICSCF, HSS, SCSCF). VM hosting RAN should have 4 or more cores.\\
+For example, if you want to run HSS with 1 core, open \cf{hss.cpp} and replace 
+\begin{lstlisting}[language=c]
+#define MAX_THREADS 3 \end{lstlisting}
+with
+\begin{lstlisting}[language=c]
+#define MAX_THREADS 1.\end{lstlisting}
+Make sure VM on which HSS is running has one core. Similar settings if you want to scale HSS to 2 core, 3 cores and so on. 
+\item  Run make. Now you will have executables created like pcscf, icscf, hss, ransim.out and scscf.
+\end{itemize}
+\paragraph*{NOTE:} If there are any errors thrown in the compilation, install the corresponding dependency.  
+
+\section*{Experimentation:}
+We will use RAN simulator to simulate the number of concurrent UE and make UE perform register, authentication and deregistration procedures.
+
+\begin{itemize}
+\item Make sure that you've correctly done the setup on all VMs and assigned cores properly. Make sure that \cf{common.h} contains correct IP addresses.
+\item Once the setup is ready, run each executable on its own VM.\\
+Usage pattern: 
+\begin{center}
+
+\label{bin_format}
+\def\arraystretch{1.5}
+
+\begin{tabular}{|c|p{11.5 cm}|}
+
+\hline
+\textbf{MODULE} & \textbf{USAGE} \\
+\hline
+HSS & \cf{./hss.out } \\
+PCSCF & \cf{./pcscf.out } \\
+SCSCF & \cf{./scscf.out } \\
+ICSCF & \cf{./icscf.out } \\
+\hline
+
+\end{tabular}
+\end{center}
+
+\item Run following commands on VM on which you're planning to use RAN simulator.
+\begin{lstlisting}[language=c]
+sudo su
+echo 1 > /proc/sys/net/ipv4/tcp_tw_reuse 
+\end{lstlisting}
+\item RAN: start RAN simulator with appropriate parameters as given below. This will generate the required amount of control traffic for the given time duration. \\
+\cf{
+./ransim.out \textless \#RAN threads\textgreater \textless Time duration in \#seconds\textgreater\\}
+A sample run is as follows \\
+\cf{./ransim.out 100 300 }
+\end{itemize}
+
+\section*{Performance Results:}
+Two performance metrics are computed at end of the experiment by RAN and displayed as output.
+\begin{itemize}
+\item \cf{Throughput}: Considering a combination of registration, authentication and deregistration request as a single request, throughput is the number of requests completed per second.
+\item \cf{Latency}: Time taken by individual request to complete.
+\end{itemize}
+
+\end{document}

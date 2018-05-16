@@ -1,0 +1,237 @@
+\documentclass[hidelinks]{report}
+
+\usepackage{graphicx}
+\usepackage{times}
+\usepackage{plain}
+\usepackage[plainpages=false]{hyperref}
+\usepackage{courier}
+\usepackage{caption}
+
+% To force figures to appear after text(along with [H] option)
+\usepackage{float}
+
+% To apply linespacing to some content
+\usepackage{setspace}
+
+% To show commands, code snippets
+\usepackage{listings}
+
+% To use checkmark (tick symbol)
+\usepackage{amssymb}
+
+\graphicspath{ {images/pdf/} }
+
+\pagestyle{plain}
+
+\fontfamily{Times}
+\selectfont
+
+\setlength{\textwidth}{6.5in}
+\setlength{\textheight}{8.5in}
+\setlength{\topmargin}{-0.25in}
+\setlength{\oddsidemargin}{-0.00in}
+\setlength{\evensidemargin}{-0.00in}
+
+% To use multirow feature of latex tables
+\usepackage{multirow}
+
+% Using and defining own color
+\usepackage{color}
+\definecolor{mycol}{RGB}{52, 43, 41}
+
+% Defining courier font usage syntax
+\newcommand{\cf}[1] {
+	\textbf{\texttt{#1}}
+}
+
+% Defining checkmark usage syntax
+\newcommand{\T} {
+	\checkmark
+}
+
+
+\begin{document}
+%% Line spacing 1.5 applied
+\setstretch{1.5}
+
+\begin{center}
+\section*{User Manual for NFV IMS core on kernel bypass setup}
+\end{center}
+
+
+\paragraph*{NOTE:} The instructions given in this manual work only for Linux-used machines, and might not work as expected
+on other OSes such as Mac and Windows. Please use online references in such cases. For details on understanding the code and various procedures involved in IMS core, please look at the \cf{developer\_manual.pdf}
+\section*{Installation of Kernel Bypass:}
+\begin{itemize}
+\item Download \cf{user manual} from \url{https://github.com/networkedsystemsIITB/Modified_mTCP/blob/master/mTCP_over_Netmap/docs/netmap_docs/user_manual.pdf}. 
+\item Install netmap on host server using \cf{step 1 to 4} given in \cf{user manual}.
+\item Make sure netmap module is loaded on the host.
+\item You need to set up 5 VMs for running NFV IMS core
+
+\item Install netmap on all the guest VMs. Follow \cf{step 6} from \cf{user manual}.
+
+\item You'll need to do the setup in the host for software-based packet distribution. Use steps are given at \cf{5.1.Setup in the host for software-based packet distribution} from the user manual. After applying patches you need to create Persistent VALE ports. 
+
+For RAN VM you need only single queue VALE port. For other NFs (like P-CSCF, I-CSCF, S-CSCF, HSS) you need to create the number of queues equal to the number of CPUs you want to give to that VNF.  
+
+Suppose you want to run PCSCF on VM with two cores, then you'll need to create two queue VALE port. Assuming that you are planning to assign MAC address 00:aa:bb:cc:dd:01 to PCSCF VM. 
+Then steps to add interface vi1 are
+\begin{lstlisting}[language=bash]
+
+       ./vale-ctl -n vi1 -C 2048,2048,2.2
+       ./vale-ctl -a vale0:vi1 
+        ifconfig vi1 hw ether 00:aa:bb:cc:dd:01
+\end{lstlisting}
+
+\paragraph*{NOTE:} In case if the host is restarted you'll need to again create all VALE ports. 
+\item Once this is done, you need to configure MAC address for VM's which you're going to use. For that use steps given at \cf{section 5, subsection 5.1, step 3} from \cf{user manual}.
+\item Once you start the guest VM, load netmap module inside guest VM using the following command. 
+\begin{lstlisting}[language=bash]
+$ cd netmap/LINUX
+$ sudo insmod netmap.ko ptnet_vnet_hdr=0
+\end{lstlisting}
+You'll see new interface getting created when you're doing it for the first time. At that time go to \cf{Network Connections}, \cf{Edit Connections} and change IPv4 Settings of the new interface which was just created to \cf{Link Local Only}. 
+
+\item Download MTCP from \url{https://github.com/eunyoung14/mtcp}.
+Configure MTCP using following commands.
+\begin{lstlisting}[language=bash]
+$ ./configure --enable-netmap CFLAGS="-DMAX_CPUS=32" 
+$ make
+\end{lstlisting}
+
+You can check \url{https://github.com/eunyoung14/mtcp/blob/master/README.netmap} for more details about configuring MTCP. 
+
+\item Steps for changing the number of cores assigned to VNF: (This applies to PCSCF, ICSCF, SCSCF, and HSS.)
+\begin{itemize}
+\item Shut down VM in question.
+\item Modify number of cores assigned to VM as per requirement.
+\item Detach and remove the VALE interface using following commands.
+\begin{lstlisting}[language=bash]
+./vale-ctl -d vale0:viX
+./vale-ctl -r viX
+\end{lstlisting}
+Where viX is interface you want to delete.
+\item Recreate the interface with required number of queues.
+
+\end{itemize}
+\end{itemize}
+
+
+\section*{SETUP:}
+\begin{itemize}
+\item Download repository.  
+\item You will need to have 5 VMs for setup. Assign one VM for each software module (P-CSCF, I-CSCF, HSS, S-CSCF and RAN). Before proceeding ahead, ensure proper communication between all VMs using the ping command. 
+\item Open \cf{common.h} file, replace IP address of each component with IP address you're planning to assign to that component. \\
+If VM on which you're planning to use has \cf{VALE interface with IP address} 10.20.30.40 then change \ 
+\begin{lstlisting}[language=c]
+#define UEADDR "192.168.122.251" // RAN 
+\end{lstlisting}
+to 
+
+\begin{lstlisting}[language=c]
+#define UEADDR "10.20.30.40" // RAN \end{lstlisting}
+
+Similarly for other all NFs. 
+
+\item Copy downloaded source on all VMs (with updated \cf{common.h}) at \path{mtcp/apps/}, where \path{mtcp} is folder where you have configured \cf{mTCP}.
+\item  Run \cf{ifconfig} command. Check the name of interface which was created using netmap. Open \textbf{server.config} and replace interface name with name of interface created on your VM.  That is if vale interface is eth3.
+Replace
+\begin{lstlisting}[language=bash]
+#------ Netmap ports -------#
+port = eth5
+\end{lstlisting}
+with
+\begin{lstlisting}[language=bash]
+#------ Netmap ports -------#
+port = eth3
+\end{lstlisting}
+
+
+\item Run following command on all VMs.
+\begin{lstlisting}[language=bash]
+$ sudo apt-get install libssl-dev 
+\end{lstlisting}
+\item  Setting up how many cores you want to run NF with (This instruction applies to PCSCF, ICSCF, HSS, SCSCF). VM hosting RAN should have 4 or more cores.\\
+For example, if you want to run HSS with 1 core, open \cf{hss.cpp} and replace 
+\begin{lstlisting}[language=c]
+#define MAX_THREADS 3 \end{lstlisting}
+with
+\begin{lstlisting}[language=c]
+#define MAX_THREADS 1.\end{lstlisting}
+Similarly open\cf{server.config} and change 
+\begin{lstlisting}[language=bash]
+num_cores = 2
+\end{lstlisting}
+with
+\begin{lstlisting}[language=bash]
+num_cores = 1
+\end{lstlisting}
+
+Similarly open \cf{Makefile} and change
+\begin{lstlisting}[language=bash]
+CFLAGS=-DMAX_CPUS=2
+\end{lstlisting}
+
+with 
+\begin{lstlisting}[language=bash]
+CFLAGS=-DMAX_CPUS=1
+\end{lstlisting}
+
+
+
+Make sure VM on which HSS is running has one core. Similar settings if you want to scale HSS to 2 core, 3 cores and so on. 
+\item  Run make. Now you will have executables created like \cf{mtcp\_pcscf}, \cf{mtcp\_icscf}, \cf{mtcp\_hss},  \cf{mtcp\_scscf}.
+
+\item For creating executable for RAN simulator, go to the VM on which you're planning to run RAN, rename \cf{Makefile\_RAN} with \cf{Makefile}. Then execute
+\begin{lstlisting}[language=bash]
+$ make ransim.out
+\end{lstlisting}
+\end{itemize}
+\paragraph*{NOTE:} If there are any errors thrown in the compilation, install the corresponding dependency.  
+
+\section*{Experimentation:}
+We will use RAN simulator to simulate the number of concurrent UE and make UE perform register, authentication and deregistration procedures.
+
+\begin{itemize}
+\item Make sure that you've correctly done the setup on all VMs and assigned cores properly. Make sure that \cf{common.h} contains correct IP addresses.
+\item Once the setup is ready, run each executable on its own VM.\\
+Usage pattern: 
+\begin{center}
+
+\label{bin_format}
+\def\arraystretch{1.5}
+
+\begin{tabular}{|c|p{11.5 cm}|}
+
+\hline
+\textbf{MODULE} & \textbf{USAGE} \\
+\hline
+HSS & \cf{sudo ./mtcp\_hss.out } \\
+PCSCF & \cf{sudo ./mtcp\_pcscf.out } \\
+SCSCF & \cf{sudo ./mtcp\_scscf.out } \\
+ICSCF & \cf{sudo ./mtcp\_icscf.out } \\
+\hline
+
+\end{tabular}
+\end{center}
+
+\item Run following commands on VM on which you're planning to use RAN simulator.
+\begin{lstlisting}[language=c]
+sudo su
+echo 1 > /proc/sys/net/ipv4/tcp_tw_reuse 
+\end{lstlisting}
+\item RAN: start RAN simulator with appropriate parameters as given below. This will generate the required amount of control traffic for the given time duration. \\
+\cf{
+sudo ./ransim.out \textless \#RAN threads\textgreater \textless Time duration in \#seconds\textgreater\\}
+A sample run is as follows \\
+\cf{sudo ./ransim.out 100 300 }
+\end{itemize}
+
+\section*{Performance Results:}
+Two performance metrics are computed at end of the experiment by RAN and displayed as output.
+\begin{itemize}
+\item \cf{Throughput}: Considering a combination of registration, authentication and deregistration request as a single request, throughput is the number of requests completed per second.
+\item \cf{Latency}: Time taken by individual request to complete.
+\end{itemize}
+
+\end{document}
