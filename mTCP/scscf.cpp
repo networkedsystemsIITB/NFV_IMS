@@ -30,7 +30,7 @@
 
 #include <sys/epoll.h>
 
-
+#define IP_RANGE 1
 #define MAX_THREADS 1 // This constant defines number of threads used by SCSCF
 
 struct arg{
@@ -74,7 +74,10 @@ void * run(void* arg1)
 	int ran_listen_fd; 	
 	int ran_accept_fd; 	
 	int shouldbeZero;	
-	int returnval; 
+	int returnval;
+    in_addr_t daddr;
+    in_port_t dport;
+    in_addr_t saddr;	 
 
 	//Structure variable storing P-CSCF server address
 	struct sockaddr_in scscf_server_addr;
@@ -112,6 +115,11 @@ void * run(void* arg1)
 	if (!mctx) {
 		handle_error("Failed to create mtcp context!\n");
 	}
+    //Do RSS work
+    daddr = inet_addr(HSSADDR);
+    dport = htons(HSSPORTNO);
+    saddr = INADDR_ANY;     
+    mtcp_init_rss(mctx, saddr, IP_RANGE, daddr, dport);	
 	/* register signal handler to mtcp */
 	mtcp_register_signal(SIGINT, SignalHandler);	
 

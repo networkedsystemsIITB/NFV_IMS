@@ -31,6 +31,8 @@
 
 
 #define MAX_THREADS 1 // This constant defines number of threads used by PCSCF
+#define IP_RANGE 1
+
 
 struct arg{
 	int id;
@@ -39,6 +41,9 @@ struct arg{
 struct arg arguments[MAX_THREADS]; // Arguments sent to Pthreads
 
 pthread_t servers[MAX_THREADS]; // Threads 
+static in_addr_t daddr;
+static in_port_t dport;
+static in_addr_t saddr;
 
 map<uint64_t,UEcontext> uecontextmap; // For storing UE context
 mutex uecontextmap_lock; // This lock will serve for locking uecontextmap
@@ -111,7 +116,14 @@ void * run(void* arg1)
 	if (!mctx) {
 		handle_error("Failed to create mtcp context!\n");
 	}
+	//Do RSS work
+	daddr = inet_addr(ICSCFADDR);
+	dport = htons(ICSCFPORTNO);
+	saddr = INADDR_ANY;	
+	mtcp_init_rss(mctx, saddr, IP_RANGE, daddr, dport);
+		
 	/* register signal handler to mtcp */
+
 	mtcp_register_signal(SIGINT, SignalHandler);	
 
 
